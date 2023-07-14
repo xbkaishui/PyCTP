@@ -1,2 +1,5 @@
 build
 run_*
+nohup.out
+dist/
+PyCTP.egg-info/

@@ -19,7 +19,7 @@ sources = [join('.', 'src', file) for file in sources]
 depends = [join('.', 'src', file) for file in headers]
 
 optional = {}
-if platform.system() == 'Linux':
+if platform.system() == 'Linux' or platform.system() == 'Darwin':
   optional['extra_compile_args'] = ['-std=c++11']
   optional['runtime_library_dirs'] = ['./']
   optional['include_dirs']=linux_ctp
@@ -35,9 +35,13 @@ if platform.system() == 'Windows':
 argments = dict(name='PyCTP',
                 sources=sources,
                 language='c++',
-                libraries=['thostmduserapi_se', 'thosttraderapi_se', 'LinuxDataCollect' if platform.system() == 'Linux' else 'WinDataCollect'],
+                libraries=['thostmduserapi_se', 'thosttraderapi_se', 'LinuxDataCollect' if platform.system() == 'Linux' or platform.system() == 'Darwin'  else 'WinDataCollect'],
                 depends=depends)
 argments.update(optional)
+
+print(f'platform.system() = {platform.system()}')
+print(f'platform.python_compiler() = {platform.python_compiler()}')
+print(f'argments = {argments}')
 
 setup(name='PyCTP',
       version='1.1.1',
