@@ -536,14 +536,88 @@ class PyCTP_Trader_API(PyCTP.CThostFtdcTraderApi):
     def OnRspOrderAction(self, pInputOrderAction, RspInfo, RequestID, IsLast):
         """处理请求撤单请求"""
         print('OnRspOrderAction:', pInputOrderAction, RspInfo, RequestID, IsLast)
-        self.__rsp_OrderAction = {}
         if self.__rsp_OrderAction['RequestID'] == RequestID \
            and self.__rsp_OrderAction['InputOrder']['OrderRef'] == pInputOrderAction['OrderRef']:
             if RspInfo is not None and RspInfo['ErrorID'] != 0:
                 self.__rsp_OrderAction.update(RspInfo)
                 self.__rsp_OrderAction['event'].set()
                 
+    def QryOrder(self, InstrumentID, InsertTimeStart, InsertTimeEnd):
+        # 	virtual int ReqQryOrder(CThostFtdcQryOrderField *pQryOrder, int nRequestID) = 0;
+        QryOrderField = {}
+        QryOrderField['BrokerID'] = self.__BrokerID                            # 经纪公司代码
+        QryOrderField['InvestorID'] = self.__InvestorID                        # 投资者代码
+        QryOrderField['InstrumentID'] = InstrumentID                           # 合约代码
+        # TThostFtdcOrderSysIDType	OrderSysID;
+        QryOrderField['InsertTimeStart'] = InsertTimeStart                         
+        QryOrderField['InsertTimeEnd'] = InsertTimeEnd                         
 
+        self.__rsp_QryAction = dict(FrontID=self.__FrontID
+                                      , SessionID=self.__SessionID
+                                      , InputOrder=QryOrderField
+                                      , RequestID=self.__IncRequestID()
+                                      , event=threading.Event())
+        ret = self.ReqQryOrder(QryOrderField, self.__rsp_QryAction['RequestID'])
+        if ret == 0:
+            self.__rsp_QryAction['event'].clear()
+            if self.__rsp_QryAction['event'].wait(self.TIMEOUT):
+                if self.__rsp_QryAction['ErrorID'] != 0:
+                    sys.stderr.write(str(self.__rsp_QryAction['ErrorMsg'], encoding='gb2312'))
+                    return self.__rsp_QryAction['ErrorID']
+                return self.__rsp_QryAction.copy()
+            else:
+                return -4
+        return ret
+        
+    def OnRspQryOrder(self, pOrders, RspInfo, RequestID, IsLast):
+        print('OnRspQryOrder:', pOrders, RspInfo, RequestID, IsLast)
+        # todo save pOrders
+        # __rsp_QryAction
+        if self.__rsp_QryAction['RequestID'] == RequestID:
+            if RspInfo is not None and RspInfo['ErrorID'] != 0:
+                self.__rsp_QryAction.update(RspInfo)
+                self.__rsp_QryAction['event'].set()
+        
+    
+    def QryTrade(self, TradeID, TradeTimeStart, TradeTimeEnd):
+        QryTradeField = {}
+        QryTradeField['BrokerID'] = self.__BrokerID                            # 经纪公司代码
+        QryTradeField['InvestorID'] = self.__InvestorID                        # 投资者代码
+        QryTradeField['TradeID'] = TradeID                                     # 成交编号
+        # TThostFtdcOrderSysIDType	OrderSysID;
+        QryTradeField['TradeTimeStart'] = TradeTimeStart                         
+        QryTradeField['TradeTimeEnd'] = TradeTimeEnd                         
+        # ///投资单元代码
+        # TThostFtdcInvestUnitIDType	InvestUnitID;
+        # ///合约代码
+        # TThostFtdcInstrumentIDType	InstrumentID;
+
+        self.__rsp_QryTrade = dict(FrontID=self.__FrontID
+                                      , SessionID=self.__SessionID
+                                      , InputOrder=QryTradeField
+                                      , RequestID=self.__IncRequestID()
+                                      , event=threading.Event())
+        ret = self.ReqQryTrade(QryTradeField, self.__rsp_QryTrade['RequestID'])
+        if ret == 0:
+            self.__rsp_QryTrade['event'].clear()
+            if self.__rsp_QryTrade['event'].wait(self.TIMEOUT):
+                if self.__rsp_QryTrade['ErrorID'] != 0:
+                    sys.stderr.write(str(self.__rsp_QryTrade['ErrorMsg'], encoding='gb2312'))
+                    return self.__rsp_QryTrade['ErrorID']
+                return self.__rsp_QryTrade.copy()
+            else:
+                return -4
+        return ret
+
+        
+    def OnRspQryTrade(self, pTrades, RspInfo, RequestID, IsLast):
+        print('OnRspQryTrade:', pTrades, RspInfo, RequestID, IsLast)
+        if self.__rsp_QryTrade['RequestID'] == RequestID:
+            if RspInfo is not None and RspInfo['ErrorID'] != 0:
+                self.__rsp_QryTrade.update(RspInfo)
+                self.__rsp_QryTrade['event'].set()
+
+    
     def OnFrontConnected(self):
         """ 当客户端与交易后台建立起通信连接时（还未登录前），该方法被调用。 """
         self.__rsp_Connect['event'].set()
