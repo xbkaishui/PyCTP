@@ -9,6 +9,28 @@ import sys
 import threading
 import PyCTP
 
+class InfoField:
+    """返回信息"""
+
+    def __init__(self):
+        """Constructor"""
+        '''错误号'''
+        self.ErrorID = 0
+        '''错误号'''
+        '''错误描述'''
+        self.ErrorMsg = '正确'
+        '''错误描述'''
+
+    def __str__(self):
+        # return 'ErrorID:{0}, ErrorMsg:{1}'.format(self.ErrorID, self.ErrorMsg)
+        return '{{"ErrorID":{self.ErrorID}, "ErrorMsg":"{self.ErrorMsg}"}}'.format(
+            self=self)
+
+    @property
+    def __dict__(self):
+        return {'ErrorID': self.ErrorID, 'ErrorMsg': str(self.ErrorMsg, 'GB2312')}
+
+
 class PyCTP_Market_API(PyCTP.CThostFtdcMdApi):
 
     TIMEOUT = 30
@@ -441,7 +463,7 @@ class PyCTP_Trader_API(PyCTP.CThostFtdcTraderApi):
                 return -4
         return ret
         
-    def OrderInsert(self, InstrumentID, Action, Direction, Volume, Price):
+    def OrderInsert(self, InstrumentID, Action, Direction, Volume, Price, OrderPriceType=PyCTP.THOST_FTDC_OPT_LimitPrice):
         """ 开平仓(限价挂单)申报 """
         InputOrder = {}
         InputOrder['BrokerID'] = self.__BrokerID                            # 经纪公司代码
@@ -449,7 +471,7 @@ class PyCTP_Trader_API(PyCTP.CThostFtdcTraderApi):
         InputOrder['InstrumentID'] = InstrumentID                           # 合约代码
         InputOrder['OrderRef'] = self.__IncOrderRef()                       # 报单引用
         InputOrder['UserID'] = self.__UserID                                # 用户代码
-        InputOrder['OrderPriceType'] = PyCTP.THOST_FTDC_OPT_LimitPrice      # 报单价格条件:限价
+        InputOrder['OrderPriceType'] = OrderPriceType      # 报单价格条件:限价
         InputOrder['Direction'] = Direction                                 # 买卖方向
         InputOrder['CombOffsetFlag'] = Action                               # 组合开平标志
         InputOrder['CombHedgeFlag']=PyCTP.THOST_FTDC_HF_Speculation         # 组合投机套保标志:投机
@@ -477,7 +499,51 @@ class PyCTP_Trader_API(PyCTP.CThostFtdcTraderApi):
                 return -4
         return ret
         
+    
+    def CancelOrderAction(self, OrderID, InstrumentID):
+        """
+         撤单，当前报单
+
+        Args:
+            OrderID (_type_): _description_
+        """
+        InputOrderAction = {}
+        InputOrderAction['BrokerID'] = self.__BrokerID                            # 经纪公司代码
+        InputOrderAction['InvestorID'] = self.__InvestorID                        # 投资者代码
+        InputOrderAction['InstrumentID'] = InstrumentID                           # 合约代码
+        InputOrderAction['OrderRef'] =    OrderID                                 # 报单引用
+        InputOrderAction['UserID'] = self.__UserID                                # 用户代码
+        InputOrderAction['ActionFlag'] = PyCTP.THOST_FTDC_AF_Delete               # 删除报单
+        # OrderAction['OrderActionRef'] = 1
         
+        self.__rsp_OrderAction = dict(FrontID=self.__FrontID
+                                      , SessionID=self.__SessionID
+                                      , InputOrder=InputOrderAction
+                                      , RequestID=self.__IncRequestID()
+                                      , event=threading.Event())
+        ret = self.ReqOrderAction(InputOrderAction, self.__rsp_OrderAction['RequestID'])
+        if ret == 0:
+            self.__rsp_OrderAction['event'].clear()
+            if self.__rsp_OrderAction['event'].wait(self.TIMEOUT):
+                if self.__rsp_OrderAction['ErrorID'] != 0:
+                    sys.stderr.write(str(self.__rsp_OrderAction['ErrorMsg'], encoding='gb2312'))
+                    return self.__rsp_OrderAction['ErrorID']
+                return self.__rsp_OrderAction.copy()
+            else:
+                return -4
+        return ret
+ 
+    def OnRspOrderAction(self, pInputOrderAction, RspInfo, RequestID, IsLast):
+        """处理请求撤单请求"""
+        print('OnRspOrderAction:', pInputOrderAction, RspInfo, RequestID, IsLast)
+        self.__rsp_OrderAction = {}
+        if self.__rsp_OrderAction['RequestID'] == RequestID \
+           and self.__rsp_OrderAction['InputOrder']['OrderRef'] == pInputOrderAction['OrderRef']:
+            if RspInfo is not None and RspInfo['ErrorID'] != 0:
+                self.__rsp_OrderAction.update(RspInfo)
+                self.__rsp_OrderAction['event'].set()
+                
+
     def OnFrontConnected(self):
         """ 当客户端与交易后台建立起通信连接时（还未登录前），该方法被调用。 """
         self.__rsp_Connect['event'].set()
